@@ -12,7 +12,6 @@ export async function initDb() {
     const client = await pool.connect();
     logDb('Connected to PostgreSQL');
     client.release();
-    logDb('Database connected');
   } catch (err) {
     logDb(`Failed to connect: ${err.message}`);
     process.exit(1);

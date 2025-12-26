@@ -19,6 +19,9 @@ export const DB_CONFIG = {
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'guard_imoto_db',
+  ssl: {
+    rejectUnauthorized: false, // allows self-signed cert
+  },
 };
 
 export const FIREBASE_SERVICE_ACCOUNT = process.env.FIREBASE_SERVICE_ACCOUNT;
