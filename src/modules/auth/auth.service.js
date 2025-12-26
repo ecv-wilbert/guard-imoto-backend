@@ -1,6 +1,5 @@
 import { query } from '../../config/db.js';
-import { initFirebase } from '../../config/firebase-admin.js';
-const admin = initFirebase();
+import { createAuditLog } from '../audit/audit.service.js';
 
 /**
  * Register a user using Firebase ID token
@@ -10,30 +9,38 @@ const admin = initFirebase();
  * @param {string} profile.last_name
  * @param {string} profile.phone
  */
-export async function registerUser(idToken, { first_name, last_name, phone }) {
+export async function registerUser(firebase_uid, firebase_email, { first_name, last_name, phone }) {
   try {
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const firebase_uid = decodedToken.uid;
-    const email = decodedToken.email;
-    const photo_url = decodedToken.picture || null;
-
-    // Check if user exists
     const { rows } = await query(`SELECT * FROM users WHERE firebase_uid = $1`, [firebase_uid]);
 
-    if (rows.length) {
-      // User already exists → throw error
-      throw new Error('User already exists');
-    }
+    if (rows.length) throw new Error('User already exists');
 
-    // Insert new user if not exists
     const insertRes = await query(
       `INSERT INTO users (firebase_uid, first_name, last_name, email, phone, photo_url)
-       VALUES ($1,$2,$3,$4,$5,$6)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [firebase_uid, first_name, last_name, email, phone, photo_url]
+      [
+        firebase_uid,
+        first_name,
+        last_name,
+        firebase_email, // email optional, can read from req.user.email if passed
+        phone,
+        null, // photo_url optional
+      ]
     );
 
-    return insertRes.rows[0];
+    const newUser = insertRes.rows[0];
+
+    await createAuditLog({
+      actor_type: 'user',
+      actor_id: firebase_uid,
+      action: 'registered',
+      target_type: 'user',
+      target_id: newUser.id,
+      metadata: { first_name, last_name, phone },
+    });
+
+    return newUser;
   } catch (err) {
     throw err;
   }

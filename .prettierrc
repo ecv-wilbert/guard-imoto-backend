@@ -1,0 +1,26 @@
+{
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "es5",
+  "printWidth": 100,
+  "useTabs": false,
+  "tabWidth": 2,
+  "bracketSpacing": true,
+  "jsxBracketSameLine": false,
+  "endOfLine": "lf",
+  "arrowParens": "always",
+  "overrides": [
+    {
+      "files": ["*.sql"],
+      "options": {
+        "printWidth": 120
+      }
+    },
+    {
+      "files": ["google-services.json", ".prettier.config.js"],
+      "options": {
+        "parser": "json"
+      }
+    }
+  ]
+}

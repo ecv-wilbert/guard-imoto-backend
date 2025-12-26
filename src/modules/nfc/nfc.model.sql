@@ -1,6 +1,0 @@
-CREATE TABLE IF NOT EXISTS nfc_tags (
-    id SERIAL PRIMARY KEY,
-    tag_id VARCHAR(100) UNIQUE NOT NULL,
-    device_id INT REFERENCES devices(id) ON DELETE CASCADE,
-    paired_at TIMESTAMP DEFAULT NOW()
-);

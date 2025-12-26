@@ -1,7 +1,8 @@
 import express from 'express';
+import { ingestTelemetry } from './telemetry.controller.js';
+
 const router = express.Router();
 
-// optional fallback endpoint
-router.post('/ingest', (req, res) => res.json({ ok: true }));
+router.post('/ingest', ingestTelemetry);
 
 export default router;

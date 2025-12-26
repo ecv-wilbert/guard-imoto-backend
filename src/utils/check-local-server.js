@@ -1,13 +1,13 @@
-import { hostname } from "os";
-import { Socket } from "net";
-import { config } from "dotenv";
+import { hostname } from 'os';
+import { Socket } from 'net';
+import { config } from 'dotenv';
 
 config();
 
 // Define a global variable to keep track of whether the code is running locally
 global.isLocal = false;
 
-export default function isRunningLocally () {
+export default function isRunningLocally() {
   // Get the IP address of the host
   const host = hostname();
   // Create a new TCP socket
@@ -23,7 +23,7 @@ export default function isRunningLocally () {
     });
 
     // If the connection fails, we're not running locally
-    socket.on("error", () => {
+    socket.on('error', () => {
       socket.destroy();
       global.isLocal = false;
       resolve(false);

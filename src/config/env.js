@@ -6,6 +6,7 @@ export const LOCAL_URL = process.env.LOCAL_URL;
 export const CLOUD_URL = process.env.CLOUD_URL;
 
 export const JWT_SECRET = process.env.JWT_SECRET;
+export const DEVICE_SECRET = process.env.DEVICE_SECRET;
 export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
 
 export const PUBNUB_PUBLISH_KEY = process.env.PUBNUB_PUBLISH_KEY;

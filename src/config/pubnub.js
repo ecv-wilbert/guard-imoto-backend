@@ -29,4 +29,29 @@ export async function publishMessage(channel, message) {
   }
 }
 
+export async function grantDeviceAccess(device_id) {
+  const channel = `device.${device_id}`;
+
+  await pubnub.grant({
+    channels: [channel],
+    read: true,
+    write: true,
+    ttl: 0, // permanent until revoked
+  });
+
+  logPubNub(`Access granted for ${channel}`);
+}
+
+export async function revokeDeviceAccess(device_id) {
+  const channel = `device.${device_id}`;
+
+  await pubnub.grant({
+    channels: [channel],
+    read: false,
+    write: false,
+  });
+
+  logPubNub(`Access revoked for ${channel}`);
+}
+
 export default pubnub;

@@ -1,15 +1,24 @@
 #!/bin/bash
 
-# Define the output file
 SQL_FILE="init.sql"
 
-echo "-- SQL Schema Generated for PostgreSQL 14+" > $SQL_FILE
-echo "-- Generated on: $(date)" >> $SQL_FILE
-echo "" >> $SQL_FILE
-
-cat <<EOF >> $SQL_FILE
+cat <<EOF > $SQL_FILE
 -- 0. Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Cleanup (In reverse order of dependencies to avoid FK errors)
+DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS alerts CASCADE;
+DROP TABLE IF EXISTS detections CASCADE;
+DROP TABLE IF EXISTS rfid_history CASCADE;
+DROP TABLE IF EXISTS battery_history CASCADE;
+DROP TABLE IF EXISTS gyro_history CASCADE;
+DROP TABLE IF EXISTS gps_history CASCADE;
+DROP TABLE IF EXISTS nfc_tags CASCADE;
+DROP TABLE IF EXISTS device_config CASCADE;
+DROP TABLE IF EXISTS devices CASCADE;
+DROP TABLE IF EXISTS user_fcm_tokens CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
 -- 1. USERS
 CREATE TABLE users (
@@ -34,14 +43,23 @@ CREATE TABLE user_fcm_tokens (
   UNIQUE (user_id, fcm_token)
 );
 
--- 3. DEVICES
+-- 3. DEVICES (Updated with serial_number, Secret Hash, and Status)
 CREATE TABLE devices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  
+  -- Identity
+  serial_number TEXT NOT NULL UNIQUE,   -- Physical hardware identifier
   device_name TEXT NOT NULL,
   device_color TEXT,
   pubnub_channel TEXT NOT NULL UNIQUE,
+  
+  -- Security & State
+  device_secret_hash TEXT,              -- For secure device-to-cloud auth
+  is_online BOOLEAN NOT NULL DEFAULT false,
+  last_seen_at TIMESTAMPTZ,
   paired BOOLEAN NOT NULL DEFAULT false,
+  
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

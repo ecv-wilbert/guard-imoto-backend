@@ -1,8 +1,19 @@
--- SQL Schema Generated for PostgreSQL 14+
--- Generated on: Tue Dec 23 22:40:25 PST 2025
-
 -- 0. Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Cleanup (In reverse order of dependencies to avoid FK errors)
+DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS alerts CASCADE;
+DROP TABLE IF EXISTS detections CASCADE;
+DROP TABLE IF EXISTS rfid_history CASCADE;
+DROP TABLE IF EXISTS battery_history CASCADE;
+DROP TABLE IF EXISTS gyro_history CASCADE;
+DROP TABLE IF EXISTS gps_history CASCADE;
+DROP TABLE IF EXISTS nfc_tags CASCADE;
+DROP TABLE IF EXISTS device_config CASCADE;
+DROP TABLE IF EXISTS devices CASCADE;
+DROP TABLE IF EXISTS user_fcm_tokens CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
 -- 1. USERS
 CREATE TABLE users (
@@ -27,13 +38,16 @@ CREATE TABLE user_fcm_tokens (
   UNIQUE (user_id, fcm_token)
 );
 
--- 3. DEVICES
+-- 3. DEVICES (Updated with Secret Hash and Online Status)
 CREATE TABLE devices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   device_name TEXT NOT NULL,
   device_color TEXT,
   pubnub_channel TEXT NOT NULL UNIQUE,
+  device_secret_hash TEXT,             -- Added for secure device authentication
+  is_online BOOLEAN NOT NULL DEFAULT false, -- Track real-time connectivity
+  last_seen_at TIMESTAMPTZ,            -- Last heartbeat timestamp
   paired BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

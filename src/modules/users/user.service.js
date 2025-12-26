@@ -1,8 +1,6 @@
 import { query } from '../../config/db.js';
-import { initFirebase } from '../../config/firebase-admin.js';
 import { logDb } from '../../utils/logger.js';
-
-const admin = initFirebase();
+import { createAuditLog } from '../audit/audit.service.js';
 
 /**
  * Get user by Firebase UID
@@ -22,9 +20,12 @@ export async function getUserByUid(firebase_uid) {
  * @param {string} [updates.phone]
  * @param {string} [updates.photo_url]
  * @param {boolean} [updates.notifications_enabled]
+ * @param {string} [actor_id] - Firebase UID performing the update
  */
-export async function updateUser(firebase_uid, updates) {
+export async function updateUser(firebase_uid, updates, actor_id = 'system') {
   const { first_name, last_name, phone, photo_url, notifications_enabled } = updates;
+
+  const oldUser = await getUserByUid(firebase_uid);
 
   const { rows } = await query(
     `UPDATE users
@@ -39,6 +40,26 @@ export async function updateUser(firebase_uid, updates) {
     [first_name, last_name, phone, photo_url, notifications_enabled, firebase_uid]
   );
 
+  const updatedUser = rows[0];
   logDb(`User updated: ${firebase_uid}`);
-  return rows[0];
+
+  // Create audit log
+  try {
+    await createAuditLog({
+      actor_type: 'user',
+      actor_id,
+      action: 'updated_profile',
+      target_type: 'user',
+      target_id: firebase_uid,
+      metadata: {
+        old: oldUser,
+        new: updatedUser,
+      },
+    });
+    logDb(`Audit log created for user update: ${firebase_uid}`);
+  } catch (err) {
+    console.error('[AUDIT] Failed to log user update:', err);
+  }
+
+  return updatedUser;
 }

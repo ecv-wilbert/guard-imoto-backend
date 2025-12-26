@@ -15,10 +15,14 @@ const firebaseAdmin = initFirebase();
 
 // Routes
 import authRoutes from './modules/auth/auth.routes.js';
+import auditRoutes from './modules/audit/audit.routes.js';
 import userRoutes from './modules/users/user.routes.js';
 import deviceRoutes from './modules/devices/device.routes.js';
 import alertRoutes from './modules/alerts/alert.routes.js';
+import nfcRoutes from './modules/nfc/nfc.routes.js';
 import telemetryRoutes from './modules/telemetry/telemetry.routes.js';
+import { authMiddleware } from './middlewares/auth.middleware.js';
+import { requireDeviceAuth } from './middlewares/device-auth.middleware.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,11 +38,13 @@ app.use(rateLimit);
 // ----------------------
 // Routes
 // ----------------------
-app.use('/auth', authRoutes);
-app.use('/users', userRoutes);
+app.use('/auth', authMiddleware, authRoutes);
+app.use('/audit', authMiddleware, auditRoutes);
+app.use('/users', authMiddleware, userRoutes);
 app.use('/devices', deviceRoutes);
-app.use('/alerts', alertRoutes);
-app.use('/telemetry', telemetryRoutes);
+app.use('/nfc', nfcRoutes);
+app.use('/alerts', authMiddleware, alertRoutes);
+app.use('/telemetry', requireDeviceAuth, telemetryRoutes);
 
 // ----------------------
 // Health check
