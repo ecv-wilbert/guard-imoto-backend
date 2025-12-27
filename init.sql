@@ -38,17 +38,23 @@ CREATE TABLE user_fcm_tokens (
   UNIQUE (user_id, fcm_token)
 );
 
--- 3. DEVICES (Updated with Secret Hash and Online Status)
+-- 3. DEVICES (Updated with serial_number, Secret Hash, and Status)
 CREATE TABLE devices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  
+  -- Identity
+  serial_number TEXT NOT NULL UNIQUE,   -- Physical hardware identifier
   device_name TEXT NOT NULL,
   device_color TEXT,
   pubnub_channel TEXT NOT NULL UNIQUE,
-  device_secret_hash TEXT,             -- Added for secure device authentication
-  is_online BOOLEAN NOT NULL DEFAULT false, -- Track real-time connectivity
-  last_seen_at TIMESTAMPTZ,            -- Last heartbeat timestamp
+  
+  -- Security & State
+  device_secret_hash TEXT,              -- For secure device-to-cloud auth
+  is_online BOOLEAN NOT NULL DEFAULT false,
+  last_seen_at TIMESTAMPTZ,
   paired BOOLEAN NOT NULL DEFAULT false,
+  
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
