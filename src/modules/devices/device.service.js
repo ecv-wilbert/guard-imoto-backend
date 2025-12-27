@@ -67,33 +67,124 @@ export async function createDevice(firebase_uid, { name, serial_number }) {
 }
 
 /**
- * Get all devices for user
+ * Get all devices for user, including latest telemetry
  */
 export async function getDevicesByUser(firebase_uid) {
   const { rows } = await query(
-    `SELECT d.*, dc.*
-     FROM devices d
-     LEFT JOIN device_config dc ON dc.device_id = d.id
-     WHERE d.owner_id = (
-       SELECT id FROM users WHERE firebase_uid = $1
-     )`,
+    `
+    SELECT 
+      d.*,
+      dc.*,
+      gps.lat AS latest_lat,
+      gps.lng AS latest_lng,
+      gps.accuracy AS latest_gps_accuracy,
+      gyro.x AS latest_gyro_x,
+      gyro.y AS latest_gyro_y,
+      gyro.z AS latest_gyro_z,
+      battery.level AS latest_battery_level,
+      battery.charging AS latest_battery_charging,
+      rfid.tag_uid AS latest_rfid
+    FROM devices d
+    LEFT JOIN device_config dc ON dc.device_id = d.id
+    -- Latest GPS
+    LEFT JOIN LATERAL (
+      SELECT lat, lng, accuracy
+      FROM gps_history
+      WHERE device_id = d.id
+      ORDER BY recorded_at DESC
+      LIMIT 1
+    ) gps ON true
+    -- Latest Gyro
+    LEFT JOIN LATERAL (
+      SELECT x, y, z
+      FROM gyro_history
+      WHERE device_id = d.id
+      ORDER BY recorded_at DESC
+      LIMIT 1
+    ) gyro ON true
+    -- Latest Battery
+    LEFT JOIN LATERAL (
+      SELECT level, charging
+      FROM battery_history
+      WHERE device_id = d.id
+      ORDER BY recorded_at DESC
+      LIMIT 1
+    ) battery ON true
+    -- Latest RFID
+    LEFT JOIN LATERAL (
+      SELECT tag_uid
+      FROM rfid_history
+      WHERE device_id = d.id
+      ORDER BY recorded_at DESC
+      LIMIT 1
+    ) rfid ON true
+    WHERE d.owner_id = (
+      SELECT id FROM users WHERE firebase_uid = $1
+    )
+  `,
     [firebase_uid]
   );
+
   return rows;
 }
 
 /**
- * Get single device
+ * Get single device by ID including latest telemetry
  */
 export async function getDeviceById(device_id, firebase_uid) {
   const { rows } = await query(
-    `SELECT d.*, dc.*
-     FROM devices d
-     LEFT JOIN device_config dc ON dc.device_id = d.id
-     WHERE d.id = $1
-       AND d.owner_id = (
-         SELECT id FROM users WHERE firebase_uid = $2
-       )`,
+    `
+    SELECT 
+      d.*,
+      dc.*,
+      gps.lat AS latest_lat,
+      gps.lng AS latest_lng,
+      gps.accuracy AS latest_gps_accuracy,
+      gyro.x AS latest_gyro_x,
+      gyro.y AS latest_gyro_y,
+      gyro.z AS latest_gyro_z,
+      battery.level AS latest_battery_level,
+      battery.charging AS latest_battery_charging,
+      rfid.tag_uid AS latest_rfid
+    FROM devices d
+    LEFT JOIN device_config dc ON dc.device_id = d.id
+    -- Latest GPS
+    LEFT JOIN LATERAL (
+      SELECT lat, lng, accuracy
+      FROM gps_history
+      WHERE device_id = d.id
+      ORDER BY recorded_at DESC
+      LIMIT 1
+    ) gps ON true
+    -- Latest Gyro
+    LEFT JOIN LATERAL (
+      SELECT x, y, z
+      FROM gyro_history
+      WHERE device_id = d.id
+      ORDER BY recorded_at DESC
+      LIMIT 1
+    ) gyro ON true
+    -- Latest Battery
+    LEFT JOIN LATERAL (
+      SELECT level, charging
+      FROM battery_history
+      WHERE device_id = d.id
+      ORDER BY recorded_at DESC
+      LIMIT 1
+    ) battery ON true
+    -- Latest RFID
+    LEFT JOIN LATERAL (
+      SELECT tag_uid
+      FROM rfid_history
+      WHERE device_id = d.id
+      ORDER BY recorded_at DESC
+      LIMIT 1
+    ) rfid ON true
+    WHERE d.id = $1
+      AND d.owner_id = (
+        SELECT id FROM users WHERE firebase_uid = $2
+      )
+  `,
     [device_id, firebase_uid]
   );
 
