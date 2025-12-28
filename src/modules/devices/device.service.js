@@ -22,6 +22,9 @@ const ALLOWED_FIELDS = [
   'sms_alerts_enabled',
 ];
 
+const DEVICE_FIELDS = ['device_name', 'device_color', 'device_enabled'];
+const CONFIG_FIELDS = ALLOWED_FIELDS; // your existing allowed config fields
+
 /**
  * Create a device linked to user
  */
@@ -192,67 +195,131 @@ export async function getDeviceById(device_id, firebase_uid) {
 }
 
 /**
- * Update device config
+ * Update device + device config
  */
 export async function updateDeviceConfig(device_id, firebase_uid, updates) {
-  // 🔎 Fetch device + config (including pubnub_channel)
-  const { rows } = await query(
-    `SELECT 
-       dc.*,
-       d.pubnub_channel
-     FROM device_config dc
-     JOIN devices d ON d.id = dc.device_id
-     WHERE dc.device_id = $1`,
-    [device_id]
-  );
+  return await withTransaction(async (client) => {
+    // 🔎 Fetch device + config
+    const { rows } = await client.query(
+      `
+      SELECT 
+        d.id,
+        d.device_name,
+        d.device_color,
+        d.device_enabled,
+        d.pubnub_channel,
+        dc.*
+      FROM devices d
+      LEFT JOIN device_config dc ON dc.device_id = d.id
+      WHERE d.id = $1
+      `,
+      [device_id]
+    );
 
-  if (!rows.length) {
-    throw new Error('Device config not found');
-  }
+    if (!rows.length) {
+      throw new Error('Device not found');
+    }
 
-  const { pubnub_channel, ...oldConfig } = rows[0];
+    const row = rows[0];
+    const { pubnub_channel, ...oldState } = row;
 
-  const fields = Object.keys(updates).filter((k) => ALLOWED_FIELDS.includes(k));
-  if (!fields.length) return oldConfig;
+    /* ----------------------------
+     * Split updates by table
+     * ---------------------------- */
+    const deviceUpdates = {};
+    const configUpdates = {};
 
-  const setClause = fields.map((k, i) => `${k} = $${i + 1}`).join(', ');
+    for (const [key, value] of Object.entries(updates)) {
+      if (DEVICE_FIELDS.includes(key)) {
+        deviceUpdates[key] = value;
+      } else if (CONFIG_FIELDS.includes(key)) {
+        configUpdates[key] = value;
+      }
+    }
 
-  const values = [...fields.map((f) => updates[f]), device_id];
+    let newDevice = null;
+    let newConfig = null;
 
-  const { rows: updatedRows } = await query(
-    `UPDATE device_config
-     SET ${setClause},
-         updated_at = NOW()
-     WHERE device_id = $${fields.length + 1}
-     RETURNING *`,
-    values
-  );
+    /* ----------------------------
+     * Update devices table
+     * ---------------------------- */
+    if (Object.keys(deviceUpdates).length) {
+      const fields = Object.keys(deviceUpdates);
+      const setClause = fields.map((k, i) => `${k} = $${i + 1}`).join(', ');
 
-  const newConfig = updatedRows[0];
+      const values = [...fields.map((f) => deviceUpdates[f]), device_id];
 
-  logDb(`Device config updated: ${device_id}`);
+      const { rows } = await client.query(
+        `
+        UPDATE devices
+        SET ${setClause},
+            updated_at = NOW()
+        WHERE id = $${fields.length + 1}
+        RETURNING *
+        `,
+        values
+      );
 
-  // 🔥 Publish to the ACTUAL device channel
-  await publishMessage(pubnub_channel, {
-    event: 'config_update',
-    payload: newConfig,
+      newDevice = rows[0];
+    }
+
+    /* ----------------------------
+     * Update device_config table
+     * ---------------------------- */
+    if (Object.keys(configUpdates).length) {
+      const fields = Object.keys(configUpdates);
+      const setClause = fields.map((k, i) => `${k} = $${i + 1}`).join(', ');
+
+      const values = [...fields.map((f) => configUpdates[f]), device_id];
+
+      const { rows } = await client.query(
+        `
+        UPDATE device_config
+        SET ${setClause},
+            updated_at = NOW()
+        WHERE device_id = $${fields.length + 1}
+        RETURNING *
+        `,
+        values
+      );
+
+      newConfig = rows[0];
+    }
+
+    /* ----------------------------
+     * Publish unified update
+     * ---------------------------- */
+    await publishMessage(pubnub_channel, {
+      event: 'device_update',
+      payload: {
+        device: newDevice,
+        config: newConfig,
+      },
+    });
+
+    /* ----------------------------
+     * Audit
+     * ---------------------------- */
+    await createAuditLog({
+      actor_type: 'user',
+      actor_id: firebase_uid,
+      action: 'updated_device',
+      target_type: 'device',
+      target_id: device_id,
+      metadata: {
+        old: oldState,
+        new: {
+          ...(newDevice || {}),
+          ...(newConfig || {}),
+        },
+      },
+    });
+
+    return {
+      device: newDevice,
+      config: newConfig,
+    };
   });
-
-  // 🧾 Audit
-  await createAuditLog({
-    actor_type: 'user',
-    actor_id: firebase_uid,
-    action: 'updated_device_config',
-    target_type: 'device',
-    target_id: device_id,
-    metadata: {
-      pubnub_channel,
-      old: oldConfig,
-      new: newConfig,
-    },
-  });
-
-  return newConfig;
 }
 
 export async function markDeviceOnline(device_id) {
