@@ -207,7 +207,7 @@ export async function updateDeviceConfig(device_id, firebase_uid, updates) {
         d.id,
         d.device_name,
         d.device_color,
-        d.device_enabled,
+        d.paired,
         d.pubnub_channel,
         dc.*
       FROM devices d
