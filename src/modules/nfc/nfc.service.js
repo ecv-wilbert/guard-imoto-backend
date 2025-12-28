@@ -124,17 +124,19 @@ export async function getDeviceByNfcTag(tag_uid) {
 export async function unlinkNfcTag(firebase_uid, tag_uid) {
   // 1️⃣ Ensure tag exists and belongs to a device owned by the user
   const { rows: tagRows } = await query(
-    `SELECT n.id, n.device_id
-     FROM nfc_tags n
-     JOIN devices d ON d.id = n.device_id
-     JOIN users u ON u.id = d.owner_id
-     WHERE n.tag_uid = $1 AND u.firebase_uid = $2`,
+    `SELECT n.id, n.device_id, d.owner_id
+   FROM nfc_tags n
+   LEFT JOIN devices d ON d.id = n.device_id
+   LEFT JOIN users u ON u.id = d.owner_id
+   WHERE n.tag_uid = $1 AND (d.owner_id IS NULL OR u.firebase_uid = $2)`,
     [tag_uid, firebase_uid]
   );
 
   if (!tagRows.length) throw new Error('NFC tag not found or not owned by user');
 
   const tag = tagRows[0];
+  if (tag.device_id && !tag.owner_id) throw new Error('Device not owned by user');
+
   const previousDeviceId = tag.device_id;
 
   // 2️⃣ Unlink the tag (device_id and paired_at set to null)
@@ -166,7 +168,6 @@ export async function unlinkNfcTag(firebase_uid, tag_uid) {
 
   return updatedTag;
 }
-
 
 /**
  * Set device to NFC scan mode
