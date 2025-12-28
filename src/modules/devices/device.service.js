@@ -5,6 +5,7 @@ import { logDb } from '../../utils/logger.js';
 
 import bcrypt from 'bcrypt';
 import { generateDeviceSecret } from '../../utils/hmac.js';
+import { withTransaction } from '../../utils/with-transaction.js';
 
 const ALLOWED_FIELDS = [
   'relay1_enabled',
