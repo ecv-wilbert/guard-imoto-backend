@@ -12,27 +12,75 @@ export async function linkNfcTag(firebase_uid, device_id, tag_uid) {
   // 1️⃣ Ensure device belongs to user
   const { rows: deviceRows } = await query(
     `SELECT id FROM devices WHERE id = $1 AND owner_id = (
-      SELECT id FROM users WHERE firebase_uid = $2
-    )`,
+       SELECT id FROM users WHERE firebase_uid = $2
+     )`,
     [device_id, firebase_uid]
   );
-
   if (!deviceRows.length) throw new Error('Device not found or not owned by user');
 
-  // 2️⃣ Insert or update NFC tag
+  // 2️⃣ Check if device already has a tag
+  const { rows: existingDeviceTag } = await query(`SELECT * FROM nfc_tags WHERE device_id = $1`, [
+    device_id,
+  ]);
+
+  if (existingDeviceTag.length) {
+    // Device already has a tag → update the tag_uid
+    const { rows: updatedRows } = await query(
+      `UPDATE nfc_tags
+       SET tag_uid = $1, paired_at = NOW()
+       WHERE device_id = $2
+       RETURNING *`,
+      [tag_uid, device_id]
+    );
+    const tag = updatedRows[0];
+
+    await createAuditLog({
+      actor_type: 'user',
+      actor_id: firebase_uid,
+      action: 'linked_nfc_tag',
+      target_type: 'nfc_tag',
+      target_id: tag.id,
+      metadata: { device_id, tag_uid },
+    });
+
+    logDb(`NFC tag updated for device: ${device_id}`);
+    return tag;
+  }
+
+  // 3️⃣ If tag_uid already exists on another device, update that row
+  const { rows: existingTag } = await query(`SELECT * FROM nfc_tags WHERE tag_uid = $1`, [tag_uid]);
+  if (existingTag.length) {
+    const { rows: updatedRows } = await query(
+      `UPDATE nfc_tags
+       SET device_id = $1, paired_at = NOW()
+       WHERE tag_uid = $2
+       RETURNING *`,
+      [device_id, tag_uid]
+    );
+    const tag = updatedRows[0];
+
+    await createAuditLog({
+      actor_type: 'user',
+      actor_id: firebase_uid,
+      action: 'linked_nfc_tag',
+      target_type: 'nfc_tag',
+      target_id: tag.id,
+      metadata: { device_id, tag_uid },
+    });
+
+    logDb(`NFC tag reassigned to device: ${device_id}`);
+    return tag;
+  }
+
+  // 4️⃣ Insert new NFC tag
   const { rows: tagRows } = await query(
     `INSERT INTO nfc_tags (tag_uid, device_id, paired_at)
      VALUES ($1, $2, NOW())
-     ON CONFLICT (tag_uid) DO UPDATE
-     SET device_id = $2,
-         paired_at = NOW()
      RETURNING *`,
     [tag_uid, device_id]
   );
-
   const tag = tagRows[0];
 
-  // 3️⃣ Audit log
   await createAuditLog({
     actor_type: 'user',
     actor_id: firebase_uid,
@@ -43,7 +91,6 @@ export async function linkNfcTag(firebase_uid, device_id, tag_uid) {
   });
 
   logDb(`NFC tag linked: ${tag.id} -> Device: ${device_id}`);
-
   return tag;
 }
 
@@ -68,13 +115,14 @@ export async function getDeviceByNfcTag(tag_uid) {
   );
   return rows[0] || null;
 }
+
 /**
  * Unlink an NFC tag from a device
  * @param {string} firebase_uid - owner user
  * @param {string} tag_uid
  */
 export async function unlinkNfcTag(firebase_uid, tag_uid) {
-  // 1️⃣ Ensure tag exists and belongs to a device owned by user
+  // 1️⃣ Ensure tag exists and belongs to a device owned by the user
   const { rows: tagRows } = await query(
     `SELECT n.id, n.device_id
      FROM nfc_tags n
@@ -87,8 +135,9 @@ export async function unlinkNfcTag(firebase_uid, tag_uid) {
   if (!tagRows.length) throw new Error('NFC tag not found or not owned by user');
 
   const tag = tagRows[0];
+  const previousDeviceId = tag.device_id;
 
-  // 2️⃣ Unlink the tag
+  // 2️⃣ Unlink the tag (device_id and paired_at set to null)
   const { rows: updatedRows } = await query(
     `UPDATE nfc_tags
      SET device_id = NULL,
@@ -100,20 +149,24 @@ export async function unlinkNfcTag(firebase_uid, tag_uid) {
 
   const updatedTag = updatedRows[0];
 
-  // 3️⃣ Audit log
+  // 3️⃣ Audit log (store previous device_id)
   await createAuditLog({
     actor_type: 'user',
     actor_id: firebase_uid,
     action: 'unlinked_nfc_tag',
     target_type: 'nfc_tag',
     target_id: updatedTag.id,
-    metadata: { device_id: tag.device_id, tag_uid },
+    metadata: {
+      device_id: previousDeviceId,
+      tag_uid,
+    },
   });
 
-  logDb(`NFC tag unlinked: ${updatedTag.id} from device ${tag.device_id}`);
+  logDb(`NFC tag unlinked: ${updatedTag.id} from device ${previousDeviceId}`);
 
   return updatedTag;
 }
+
 
 /**
  * Set device to NFC scan mode
