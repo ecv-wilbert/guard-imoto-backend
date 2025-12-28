@@ -23,7 +23,7 @@ const ALLOWED_FIELDS = [
   'sms_alerts_enabled',
 ];
 
-const DEVICE_FIELDS = ['device_name', 'device_color', 'device_enabled'];
+const DEVICE_FIELDS = ['device_name', 'device_color', 'paired'];
 const CONFIG_FIELDS = ALLOWED_FIELDS; // your existing allowed config fields
 
 /**
